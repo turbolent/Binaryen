@@ -1,0 +1,5 @@
+module CBinaryen [system] {
+    header "binaryen.h"
+    link "binaryen"
+    export *
+}
