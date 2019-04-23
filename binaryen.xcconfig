@@ -1,0 +1,2 @@
+HEADER_SEARCH_PATHS = /usr/local/include
+LIBRARY_SEARCH_PATHS = /usr/local/lib

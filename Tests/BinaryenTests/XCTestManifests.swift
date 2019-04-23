@@ -6,6 +6,7 @@ extension BinaryenTests {
     //   `swift test --generate-linuxmain`
     // to regenerate.
     static let __allTests__BinaryenTests = [
+        ("testModule", testModule),
         ("testTypeNone", testTypeNone),
     ]
 }
