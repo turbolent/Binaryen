@@ -140,6 +140,117 @@ public final class Module {
         BinaryenSetStart(moduleRef, function.functionRef)
     }
 
+    public func addFunctionImport(
+        internalName: String,
+        externalModuleName: String,
+        externalBaseName: String,
+        functionType: FunctionType
+    ) {
+        BinaryenAddFunctionImport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalModuleName.cString(using: .utf8),
+            externalBaseName.cString(using: .utf8),
+            functionType.functionTypeRef
+        )
+    }
+
+    public func addTableImport(
+        internalName: String,
+        externalModuleName: String,
+        externalBaseName: String
+    ) {
+        BinaryenAddTableImport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalModuleName.cString(using: .utf8),
+            externalBaseName.cString(using: .utf8)
+        )
+    }
+
+    public func addMemoryImport(
+        internalName: String,
+        externalModuleName: String,
+        externalBaseName: String,
+        shared: Bool
+    ) {
+        BinaryenAddMemoryImport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalModuleName.cString(using: .utf8),
+            externalBaseName.cString(using: .utf8),
+            shared ? 1 : 0
+        )
+    }
+
+    public func addGlobalImport(
+        internalName: String,
+        externalModuleName: String,
+        externalBaseName: String,
+        globalType: Type
+    ) {
+        BinaryenAddGlobalImport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalModuleName.cString(using: .utf8),
+            externalBaseName.cString(using: .utf8),
+            globalType.type
+        )
+    }
+
+    public func addFunctionExport(
+        internalName: String,
+        externalName: String
+    ) {
+        BinaryenAddFunctionExport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalName.cString(using: .utf8)
+        )
+    }
+
+    public func addTableExport(
+        internalName: String,
+        externalName: String
+    ) {
+        BinaryenAddTableExport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalName.cString(using: .utf8)
+        )
+    }
+
+    public func addMemoryExport(
+        internalName: String,
+        externalName: String
+    ) {
+        BinaryenAddMemoryExport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalName.cString(using: .utf8)
+        )
+    }
+
+    public func addGlobalExport(
+        internalName: String,
+        externalName: String
+    ) {
+        BinaryenAddGlobalExport(
+            moduleRef,
+            internalName.cString(using: .utf8),
+            externalName.cString(using: .utf8)
+        )
+    }
+
+    public func removeExport(
+        externalName: String
+    ) {
+        BinaryenRemoveExport(
+            moduleRef,
+            externalName.cString(using: .utf8)
+        )
+    }
+
     deinit {
         BinaryenModuleDispose(moduleRef)
     }
