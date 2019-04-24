@@ -90,8 +90,112 @@ public final class Module {
         BinaryenRemoveFunctionType(moduleRef, name.cString(using: .utf8))
     }
 
+    /// Adds a function to the module. This is thread-safe.
+    ///
+    /// - Parameter variableTypes:
+    ///    the types of variables. In WebAssembly, vars share
+    ///    an index space with params. In other words, params come from
+    ///    the function type, and vars are provided in this call, and
+    ///    together they are all the locals. The order is first params
+    ///    and then vars, so if you have one param it will be at index
+    ///    0 (and written $0), and if you also have 2 vars they will be
+    ///    at indexes 1 and 2, etc., that is, they share an index space.
+    ///
+    public func addFunction(name: String, type: FunctionType, variableTypes: [Type], body: Expression) -> Function? {
+        var variableTypes = variableTypes.map { $0.type }
+        guard let functionRef =
+            BinaryenAddFunction(
+                moduleRef,
+                name.cString(using: .utf8),
+                type.functionTypeRef,
+                UnsafeMutablePointer(&variableTypes),
+                BinaryenIndex(variableTypes.count),
+                body.expressionRef
+            )
+        else {
+            return nil
+        }
+
+        return Function(functionRef: functionRef)
+    }
+
+    /// Gets a function reference by name.
+    public func getFunction(name: String) -> Function? {
+        guard let functionRef =
+            BinaryenGetFunction(moduleRef, name.cString(using: .utf8))
+        else {
+            return nil
+        }
+
+        return Function(functionRef: functionRef)
+    }
+
+    /// Removes a function by name.
+    public func removeFunction(name: String) {
+        BinaryenRemoveFunction(moduleRef, name.cString(using: .utf8))
+    }
+
+    /// Set the start function. One per module.
+    public func setStart(_ function: Function) {
+        BinaryenSetStart(moduleRef, function.functionRef)
+    }
+
     deinit {
         BinaryenModuleDispose(moduleRef)
+    }
+}
+
+/// Functions.
+public struct Function {
+
+    public let functionRef: BinaryenFunctionRef!
+
+    internal init(functionRef: BinaryenFunctionRef!) {
+        self.functionRef = functionRef
+    }
+
+    /// Gets the name.
+    public var name: String {
+        return String(cString: BinaryenFunctionGetName(functionRef))
+    }
+
+    /// Gets the name of the `FunctionType`.
+    /// May be nil if the signature is implicit.
+    public var typeName: String? {
+        guard let typeNameCString = BinaryenFunctionGetType(functionRef) else {
+            return nil
+        }
+        return String(cString: typeNameCString)
+    }
+
+    /// Gets the number of parameters.
+    public var parameterCount: Int {
+        return Int(BinaryenFunctionGetNumParams(functionRef))
+    }
+
+    /// Gets the type of the parameter at the specified index.
+    public func paramerterType(at index: Int) -> Type? {
+        return Type(type: BinaryenFunctionGetParam(functionRef, BinaryenIndex(index)))
+    }
+
+    /// Gets the result type.
+    public var resultType: Type {
+        return Type(type: BinaryenFunctionGetResult(functionRef))
+    }
+
+    /// Gets the number of additional locals.
+    public var variableCount: Int {
+        return Int(BinaryenFunctionGetNumVars(functionRef))
+    }
+
+    /// Gets the type of the additional local at the specified index.
+    public func variableType(at index: Int) -> Type? {
+        return Type(type: BinaryenFunctionGetVar(functionRef, BinaryenIndex(index)))
+    }
+
+    /// Gets the body of the specified `Function`.
+    public var body: Expression {
+        return Expression(expressionRef: BinaryenFunctionGetBody(functionRef))
     }
 }
 
@@ -204,8 +308,8 @@ public struct Type {
     public static let float64 = Type(type: BinaryenTypeFloat64())
     public static let vec128 = Type(type: BinaryenTypeVec128())
     public static let unreachable = Type(type: BinaryenTypeUnreachable())
-    // Not a real type. Used as the last parameter to BinaryenBlock to let
-    // the API figure out the type instead of providing one.
+    /// Not a real type. Used as the last parameter to BinaryenBlock to let
+    /// the API figure out the type instead of providing one.
     public static let auto = Type(type: BinaryenTypeAuto())
 }
 
@@ -619,10 +723,10 @@ public class Expression {
         BinaryenExpressionPrint(expressionRef)
     }
 
-    // Block: `name` can be nil. Specifying `Type.auto` as the 'type'
-    //        parameter indicates that the block's type shall be figured out
-    //        automatically instead of explicitly providing it. This conforms
-    //        to the behavior before the 'type' parameter has been introduced.
+    /// Block: `name` can be nil. Specifying `Type.auto` as the 'type'
+    ///        parameter indicates that the block's type shall be figured out
+    ///        automatically instead of explicitly providing it. This conforms
+    ///        to the behavior before the 'type' parameter has been introduced.
     public static func block(
         module: Module,
         name: String? = nil,
@@ -643,7 +747,7 @@ public class Expression {
         )
     }
 
-    // If: ifFalse can be nil
+    /// If: ifFalse can be nil
     public static func `if`(
         module: Module,
         condition: Expression,
