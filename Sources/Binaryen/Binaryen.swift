@@ -251,10 +251,48 @@ public final class Module {
         )
     }
 
+    public func addGlobal(name: String, type: Type, mutable: Bool, initial: Expression) -> Global {
+        return Global(globalRef:
+            BinaryenAddGlobal(
+                moduleRef,
+                name.cString(using: .utf8),
+                type.type,
+                mutable ? 1 : 0,
+                initial.expressionRef
+            )
+        )
+    }
+
+    public func removeGlobal(name: String) {
+        BinaryenRemoveGlobal(moduleRef, name.cString(using: .utf8))
+    }
+
     deinit {
         BinaryenModuleDispose(moduleRef)
     }
 }
+
+public struct Global {
+    public let globalRef: BinaryenGlobalRef!
+
+    internal init(globalRef: BinaryenGlobalRef!) {
+        self.globalRef = globalRef
+    }
+
+    // TODO: https://github.com/WebAssembly/binaryen/pull/2047
+//    /// Gets the external module name.
+//    public var externalModuleName: String? {
+//        return BinaryenGlobalImportGetModule(globalRef)
+//            .map { String(cString: $0) }
+//    }
+
+    /// Gets the external base name.
+    public var externalBaseName: String? {
+        return BinaryenGlobalImportGetBase(globalRef)
+            .map { String(cString: $0) }
+    }
+}
+
 
 /// Functions.
 public struct Function {
@@ -273,10 +311,8 @@ public struct Function {
     /// Gets the name of the `FunctionType`.
     /// May be nil if the signature is implicit.
     public var typeName: String? {
-        guard let typeNameCString = BinaryenFunctionGetType(functionRef) else {
-            return nil
-        }
-        return String(cString: typeNameCString)
+        return BinaryenFunctionGetType(functionRef)
+            .map { String(cString: $0) }
     }
 
     /// Gets the number of parameters.
@@ -307,6 +343,18 @@ public struct Function {
     /// Gets the body of the specified `Function`.
     public var body: Expression {
         return Expression(expressionRef: BinaryenFunctionGetBody(functionRef))
+    }
+
+    /// Gets the external module name.
+    public var externalModuleName: String? {
+        return BinaryenFunctionImportGetModule(functionRef)
+            .map { String(cString: $0) }
+    }
+
+    /// Gets the external base name.
+    public var externalBaseName: String? {
+        return BinaryenFunctionImportGetBase(functionRef)
+            .map { String(cString: $0) }
     }
 }
 
