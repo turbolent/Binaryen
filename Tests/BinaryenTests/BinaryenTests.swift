@@ -9,7 +9,7 @@ final class BinaryenTests: XCTestCase {
 
     func testModule() throws {
         let module = Module()
-        module.addFunctionType(name: "x", result: BinaryenTypeInt32(), parameterTypes: [])
+        module.addFunctionType(name: "x", result: .int32, parameterTypes: [])
         _ = module.write().data
     }
 }
