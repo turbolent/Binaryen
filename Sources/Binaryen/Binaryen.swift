@@ -19,15 +19,18 @@ public final class Module {
 
     public let moduleRef: BinaryenModuleRef!
 
+    public let expressions: ExpressionFactory
+
     internal init(moduleRef: BinaryenModuleRef!) {
         self.moduleRef = moduleRef
+        self.expressions = ExpressionFactory(moduleRef: moduleRef)
     }
 
     public convenience init() {
         self.init(moduleRef: BinaryenModuleCreate())
     }
 
-    // Deserialize a module from binary form.
+    /// Deserialize a module from binary form.
     public convenience init(data: Data) {
         var data = data
         let count = data.count
@@ -68,7 +71,7 @@ public final class Module {
     }
 
     /// Add a new function type. This is thread-safe.
-    /// Note: name can be NULL, in which case we auto-generate a name
+    /// Note: name can be nil, in which case we auto-generate a name
     public func addFunctionType(name: String? = nil, result: Type, parameterTypes: [Type]) -> FunctionType? {
         var parameterTypes = parameterTypes.map { $0.type }
         guard let functionTypeRef =
@@ -201,44 +204,60 @@ public final class Module {
     public func addFunctionExport(
         internalName: String,
         externalName: String
-    ) {
-        BinaryenAddFunctionExport(
-            moduleRef,
-            internalName.cString(using: .utf8),
-            externalName.cString(using: .utf8)
+    )
+        -> Export
+    {
+        return Export(
+            exportRef: BinaryenAddFunctionExport(
+                moduleRef,
+                internalName.cString(using: .utf8),
+                externalName.cString(using: .utf8)
+            )
         )
     }
 
     public func addTableExport(
         internalName: String,
         externalName: String
-    ) {
-        BinaryenAddTableExport(
-            moduleRef,
-            internalName.cString(using: .utf8),
-            externalName.cString(using: .utf8)
+    )
+        -> Export
+    {
+        return Export(
+            exportRef: BinaryenAddTableExport(
+                moduleRef,
+                internalName.cString(using: .utf8),
+                externalName.cString(using: .utf8)
+            )
         )
     }
 
     public func addMemoryExport(
         internalName: String,
         externalName: String
-    ) {
-        BinaryenAddMemoryExport(
-            moduleRef,
-            internalName.cString(using: .utf8),
-            externalName.cString(using: .utf8)
+    )
+        -> Export
+    {
+        return Export(
+            exportRef: BinaryenAddMemoryExport(
+                moduleRef,
+                internalName.cString(using: .utf8),
+                externalName.cString(using: .utf8)
+            )
         )
     }
 
     public func addGlobalExport(
         internalName: String,
         externalName: String
-    ) {
-        BinaryenAddGlobalExport(
-            moduleRef,
-            internalName.cString(using: .utf8),
-            externalName.cString(using: .utf8)
+    )
+        -> Export
+    {
+        return Export(
+            exportRef: BinaryenAddGlobalExport(
+                moduleRef,
+                internalName.cString(using: .utf8),
+                externalName.cString(using: .utf8)
+            )
         )
     }
 
@@ -267,6 +286,219 @@ public final class Module {
         BinaryenRemoveGlobal(moduleRef, name.cString(using: .utf8))
     }
 
+    public struct ExpressionFactory {
+
+        private let moduleRef: BinaryenModuleRef!
+
+        internal init(moduleRef: BinaryenModuleRef!) {
+            self.moduleRef = moduleRef
+        }
+
+        /// Block: `name` can be nil. Specifying `Type.auto` as the 'type'
+        ///        parameter indicates that the block's type shall be figured out
+        ///        automatically instead of explicitly providing it. This conforms
+        ///        to the behavior before the 'type' parameter has been introduced.
+        public func block(
+            name: String? = nil,
+            children: [Expression],
+            type: Type
+        )
+            -> BlockExpression
+        {
+            var children = children.map { $0.expressionRef }
+            return BlockExpression(
+                expressionRef: BinaryenBlock(
+                    moduleRef,
+                    name?.cString(using: .utf8),
+                    UnsafeMutablePointer(&children),
+                    BinaryenIndex(children.count),
+                    type.type
+                )
+            )
+        }
+
+        /// If: ifFalse can be nil
+        public func `if`(
+            condition: Expression,
+            ifTrue: Expression,
+            ifFalse: Expression?
+        )
+            -> IfExpression
+        {
+            return IfExpression(
+                expressionRef: BinaryenIf(
+                    moduleRef,
+                    condition.expressionRef,
+                    ifTrue.expressionRef,
+                    ifFalse?.expressionRef
+                )
+            )
+        }
+
+        public func loop(
+            name: String,
+            body: Expression
+        )
+            -> LoopExpression
+        {
+            return LoopExpression(
+                expressionRef: BinaryenLoop(
+                    moduleRef,
+                    name.cString(using: .utf8),
+                    body.expressionRef
+                )
+            )
+        }
+
+        /// Break: value and condition can be nil
+        public func `break`(
+            name: String,
+            condition: Expression? = nil,
+            value: Expression? = nil
+        )
+            -> BreakExpression
+        {
+            return BreakExpression(
+                expressionRef: BinaryenBreak(
+                    moduleRef,
+                    name.cString(using: .utf8),
+                    condition?.expressionRef,
+                    value?.expressionRef
+                )
+            )
+        }
+
+        /// Switch: value can be nil
+        public func `switch`(
+            names: [String],
+            defaultName: String,
+            condition: Expression,
+            value: Expression? = nil
+        )
+            -> SwitchExpression
+        {
+            var names = names.map { UnsafePointer($0.cString(using: .utf8)) }
+            return SwitchExpression(
+                expressionRef: BinaryenSwitch(
+                    moduleRef,
+                    UnsafeMutablePointer(&names),
+                    BinaryenIndex(names.count),
+                    defaultName.cString(using: .utf8),
+                    condition.expressionRef,
+                    value?.expressionRef
+                )
+            )
+        }
+
+        /// Call: Note the 'returnType' parameter. You must declare the
+        ///       type returned by the function being called, as that
+        ///       function might not have been created yet, so we don't
+        ///       know what it is.
+        public func call(
+            target: String,
+            operands: [Expression],
+            returnType: Type
+        )
+            -> CallExpression
+        {
+            var operands = operands.map { $0.expressionRef }
+            return CallExpression(
+                expressionRef: BinaryenCall(
+                    moduleRef,
+                    target.cString(using: .utf8),
+                    UnsafeMutablePointer(&operands),
+                    BinaryenIndex(operands.count),
+                    returnType.type
+                )
+            )
+        }
+
+        public func callIndirect(
+            target: Expression,
+            operands: [Expression],
+            type: String
+        )
+            -> CallIndirectExpression
+        {
+            var operands = operands.map { $0.expressionRef }
+            return CallIndirectExpression(
+                expressionRef: BinaryenCallIndirect(
+                    moduleRef,
+                    target.expressionRef,
+                    UnsafeMutablePointer(&operands),
+                    BinaryenIndex(operands.count),
+                    type.cString(using: .utf8)
+                )
+            )
+        }
+
+        /// GetLocal: Note the 'type' parameter. It might seem redundant, since the
+        ///           local at that index must have a type. However, this API lets you
+        ///           build code "top-down": create a node, then its parents, and so
+        ///           on, and finally create the function at the end. (Note that in fact
+        ///           you do not mention a function when creating ExpressionRefs, only
+        ///           a module.) And since GetLocal is a leaf node, we need to be told
+        ///           its type. (Other nodes detect their type either from their
+        ///           type or their opcode, or failing that, their children. But
+        ///           GetLocal has no children, it is where a "stream" of type info
+        ///           begins.)
+        ///           Note also that the index of a local can refer to a param or
+        ///           a var, that is, either a parameter to the function or a variable
+        ///           declared when you call BinaryenAddFunction. See BinaryenAddFunction
+        ///           for more details.
+        public func getLocal(index: Int, type: Type) -> GetLocalExpression? {
+            return GetLocalExpression(
+                expressionRef: BinaryenGetLocal(
+                    moduleRef,
+                    BinaryenIndex(index),
+                    type.type
+                )
+            )
+        }
+
+        public func setLocal(index: Int, value: Expression) -> SetLocalExpression? {
+            return SetLocalExpression(
+                expressionRef: BinaryenSetLocal(
+                    moduleRef,
+                    BinaryenIndex(index),
+                    value.expressionRef
+                )
+            )
+        }
+
+        public func teeLocal(index: Int, value: Expression) -> SetLocalExpression? {
+            return SetLocalExpression(
+                expressionRef: BinaryenTeeLocal(
+                    moduleRef,
+                    BinaryenIndex(index),
+                    value.expressionRef
+                )
+            )
+        }
+
+        public func getGlobal(name: String, type: Type) -> GetGlobalExpression {
+            return GetGlobalExpression(
+                expressionRef: BinaryenGetGlobal(
+                    moduleRef,
+                    name.cString(using: .utf8),
+                    type.type
+                )
+            )
+        }
+
+        public func setGlobal(name: String, value: Expression) -> SetGlobalExpression {
+            return SetGlobalExpression(
+                expressionRef: BinaryenSetGlobal(
+                    moduleRef,
+                    name.cString(using: .utf8),
+                    value.expressionRef
+                )
+            )
+        }
+
+        // TODO: add more
+    }
+
     deinit {
         BinaryenModuleDispose(moduleRef)
     }
@@ -290,6 +522,30 @@ public struct Global {
     public var externalBaseName: String? {
         return BinaryenGlobalImportGetBase(globalRef)
             .map { String(cString: $0) }
+    }
+}
+
+
+public struct Export {
+    public let exportRef: BinaryenExportRef!
+
+    internal init(exportRef: BinaryenExportRef!) {
+        self.exportRef = exportRef
+    }
+
+    /// Gets the external kind.
+    public var externalKind: ExternalKind {
+        return ExternalKind(externalKind: BinaryenExportGetKind(exportRef))
+    }
+
+    /// Gets the external name.
+    public var externalName: String {
+        return String(cString: BinaryenExportGetName(exportRef))
+    }
+
+    /// Gets the internal name.
+    public var internalName: String {
+        return String(cString: BinaryenExportGetValue(exportRef))
     }
 }
 
@@ -375,13 +631,13 @@ public struct FunctionType {
     }
 
     /// Gets the result type.
-    public var resultType: BinaryenType {
-        return BinaryenFunctionTypeGetResult(functionTypeRef)
+    public var resultType: Type {
+        return Type(type: BinaryenFunctionTypeGetResult(functionTypeRef))
     }
 
     /// Gets the type of the parameter at the specified index.
-    public func parameterType(at index: Int) -> BinaryenType? {
-        return BinaryenFunctionTypeGetParam(functionTypeRef, BinaryenIndex(index))
+    public func parameterType(at index: Int) -> Type? {
+        return Type(type: BinaryenFunctionTypeGetParam(functionTypeRef, BinaryenIndex(index)))
     }
 
     /// Gets the number of parameters.
@@ -448,6 +704,18 @@ public struct Binaryen {
             BinaryenSetDebugInfo(newValue ? 1 : 0)
         }
     }
+
+    /// Sets whether API tracing is on or off. It is off by default. When on, each call
+    /// to an API method will print out C code equivalent to it, which is useful for
+    /// auto-generating standalone testcases from projects using the API.
+    /// When calling this to turn on tracing, the prelude of the full program is printed,
+    /// and when calling it to turn it off, the ending of the program is printed, giving
+    /// you the full compilable testcase.
+    /// TODO: compile-time option to enable/disable this feature entirely at build time?
+    public static func setAPITracing(enabled: Bool) {
+        BinaryenSetAPITracing(enabled ? 1 : 0)
+    }
+
 }
 
 
@@ -524,16 +792,16 @@ public struct ExpressionId {
 /// External kinds
 public struct ExternalKind {
 
-    public let expressionId: BinaryenExpressionId
+    public let externalKind: BinaryenExternalKind
 
-    internal init(expressionId: BinaryenExpressionId) {
-        self.expressionId = expressionId
+    internal init(externalKind: BinaryenExternalKind) {
+        self.externalKind = externalKind
     }
 
-    public static let function = ExternalKind(expressionId: BinaryenExternalFunction())
-    public static let table = ExternalKind(expressionId: BinaryenExternalTable())
-    public static let memory = ExternalKind(expressionId: BinaryenExternalMemory())
-    public static let global = ExternalKind(expressionId: BinaryenExternalGlobal())
+    public static let function = ExternalKind(externalKind: BinaryenExternalFunction())
+    public static let table = ExternalKind(externalKind: BinaryenExternalTable())
+    public static let memory = ExternalKind(externalKind: BinaryenExternalMemory())
+    public static let global = ExternalKind(externalKind: BinaryenExternalGlobal())
 }
 
 
@@ -881,52 +1149,6 @@ public class Expression {
     public func print() {
         BinaryenExpressionPrint(expressionRef)
     }
-
-    /// Block: `name` can be nil. Specifying `Type.auto` as the 'type'
-    ///        parameter indicates that the block's type shall be figured out
-    ///        automatically instead of explicitly providing it. This conforms
-    ///        to the behavior before the 'type' parameter has been introduced.
-    public static func block(
-        module: Module,
-        name: String? = nil,
-        children: [Expression],
-        type: Type
-    )
-        -> Expression
-    {
-        var children = children.map { $0.expressionRef }
-        return BlockExpression(
-            expressionRef: BinaryenBlock(
-                module.moduleRef,
-                name?.cString(using: .utf8),
-                UnsafeMutablePointer(&children),
-                BinaryenIndex(children.count),
-                type.type
-            )
-        )
-    }
-
-    /// If: ifFalse can be nil
-    public static func `if`(
-        module: Module,
-        condition: Expression,
-        ifTrue: Expression,
-        ifFalse: Expression?
-    )
-        -> Expression
-    {
-        return IfExpression(
-            expressionRef: BinaryenIf(
-                module.moduleRef,
-                condition.expressionRef,
-                ifTrue.expressionRef,
-                ifFalse?.expressionRef
-            )
-        )
-    }
-
-    // TODO: add more
-
 }
 
 
@@ -960,5 +1182,136 @@ public final class IfExpression: Expression {
     public var ifFalse: Expression? {
         return BinaryenIfGetIfFalse(expressionRef)
             .map { Expression(expressionRef: $0) }
+    }
+}
+
+
+public final class LoopExpression: Expression {
+
+    public var name: String {
+        return String(cString: BinaryenLoopGetName(expressionRef))
+    }
+
+    public var body: Expression {
+        return Expression(expressionRef: BinaryenLoopGetBody(expressionRef))
+    }
+}
+
+
+public final class BreakExpression: Expression {
+
+    public var name: String {
+        return String(cString: BinaryenBreakGetName(expressionRef))
+    }
+
+    public var condition: Expression? {
+        return BinaryenBreakGetCondition(expressionRef)
+            .map { Expression(expressionRef: $0) }
+    }
+
+    public var value: Expression? {
+        return BinaryenBreakGetValue(expressionRef)
+            .map { Expression(expressionRef: $0) }
+    }
+}
+
+
+public final class SwitchExpression: Expression {
+
+    public var nameCount: Int {
+        return Int(BinaryenSwitchGetNumNames(expressionRef))
+    }
+
+    public func name(at index: Int) -> String? {
+        return BinaryenSwitchGetName(expressionRef, BinaryenIndex(index))
+            .map { String(cString: $0) }
+    }
+
+    public var defaultName: String {
+        return String(cString: BinaryenSwitchGetDefaultName(expressionRef))
+    }
+
+    public var condition: Expression {
+        return Expression(expressionRef: BinaryenSwitchGetCondition(expressionRef))
+    }
+
+    public var value: Expression? {
+        return BinaryenSwitchGetValue(expressionRef)
+            .map { Expression(expressionRef: $0) }
+    }
+}
+
+
+public final class CallExpression: Expression {
+
+    public var target: String {
+        return String(cString: BinaryenCallGetTarget(expressionRef))
+    }
+
+    public var operandCount: Int {
+        return Int(BinaryenCallGetNumOperands(expressionRef))
+    }
+
+    public func operand(at index: Int) -> Expression? {
+        return BinaryenCallGetOperand(expressionRef, BinaryenIndex(index))
+            .map { Expression(expressionRef: $0) }
+    }
+}
+
+
+public final class CallIndirectExpression: Expression {
+
+    public var target: Expression {
+        return Expression(expressionRef: BinaryenCallIndirectGetTarget(expressionRef))
+    }
+
+    public var operandCount: Int {
+        return Int(BinaryenCallIndirectGetNumOperands(expressionRef))
+    }
+
+    public func operand(at index: Int) -> Expression? {
+        return BinaryenCallIndirectGetOperand(expressionRef, BinaryenIndex(index))
+            .map { Expression(expressionRef: $0) }
+    }
+}
+
+
+public final class GetLocalExpression: Expression {
+
+    public var index: Int {
+        return Int(BinaryenGetLocalGetIndex(expressionRef))
+    }
+}
+
+
+public final class SetLocalExpression: Expression {
+
+    public var index: Int {
+        return Int(BinaryenSetLocalGetIndex(expressionRef))
+    }
+
+    public var value: Expression {
+        return Expression(expressionRef: BinaryenSetLocalGetValue(expressionRef))
+    }
+}
+
+
+public final class SetGlobalExpression: Expression {
+
+    public var name: String {
+        return String(cString: BinaryenSetGlobalGetName(expressionRef))
+    }
+
+
+    public var value: Expression {
+        return Expression(expressionRef: BinaryenSetGlobalGetValue(expressionRef))
+    }
+}
+
+
+public final class GetGlobalExpression: Expression {
+
+    public var name: String {
+        return String(cString: BinaryenGetGlobalGetName(expressionRef))
     }
 }
