@@ -496,6 +496,55 @@ public final class Module {
             )
         }
 
+        /// Load: align can be 0, in which case it will be the natural alignment (equal to bytes)
+        public func load(
+            bytes: UInt32,
+            signed: Bool,
+            offset: UInt32,
+            align: UInt32,
+            type: Type,
+            pointer: Expression
+        )
+            -> LoadExpression
+        {
+            return LoadExpression(
+                expressionRef: BinaryenLoad(
+                    moduleRef,
+                    bytes,
+                    signed ? 1 : 0,
+                    offset,
+                    align,
+                    type.type,
+                    pointer.expressionRef
+                )
+            )
+        }
+
+        /// Store: align can be 0, in which case it will be the natural alignment (equal to bytes)
+        public func store(
+            bytes: UInt32,
+            signed: Bool,
+            offset: UInt32,
+            align: UInt32,
+            pointer: Expression,
+            value: Expression,
+            type: Type
+        )
+            -> StoreExpression
+        {
+            return StoreExpression(
+                expressionRef: BinaryenStore(
+                    moduleRef,
+                    bytes,
+                    offset,
+                    align,
+                    pointer.expressionRef,
+                    value.expressionRef,
+                    type.type
+                )
+            )
+        }
+
         // TODO: add more
     }
 
@@ -1313,5 +1362,53 @@ public final class GetGlobalExpression: Expression {
 
     public var name: String {
         return String(cString: BinaryenGetGlobalGetName(expressionRef))
+    }
+}
+
+
+public final class LoadExpression: Expression {
+
+    public var isSigned: Bool {
+        return BinaryenLoadIsSigned(expressionRef) == 1
+    }
+
+    public var offset: UInt32 {
+        return BinaryenLoadGetOffset(expressionRef)
+    }
+
+    public var bytes: UInt32 {
+        return BinaryenLoadGetBytes(expressionRef)
+    }
+
+    public var align: UInt32 {
+        return BinaryenLoadGetAlign(expressionRef)
+    }
+
+    public var pointer: Expression {
+        return Expression(expressionRef: BinaryenLoadGetPtr(expressionRef))
+    }
+}
+
+
+public final class StoreExpression: Expression {
+
+    public var offset: UInt32 {
+        return BinaryenStoreGetBytes(expressionRef)
+    }
+
+    public var bytes: UInt32 {
+        return BinaryenStoreGetOffset(expressionRef)
+    }
+
+    public var align: UInt32 {
+        return BinaryenStoreGetAlign(expressionRef)
+    }
+
+    public var pointer: Expression {
+        return Expression(expressionRef: BinaryenStoreGetPtr(expressionRef))
+    }
+
+    public var value: Expression {
+        return Expression(expressionRef: BinaryenStoreGetValue(expressionRef))
     }
 }
