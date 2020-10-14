@@ -11,26 +11,13 @@ public struct Function {
         return String(cString: BinaryenFunctionGetName(functionRef))
     }
 
-    /// Gets the name of the `FunctionType`.
-    /// May be nil if the signature is implicit.
-    public var typeName: String? {
-        return BinaryenFunctionGetType(functionRef)
-            .map { String(cString: $0) }
-    }
-
-    /// Gets the number of parameters.
-    public var parameterCount: Int {
-        return Int(BinaryenFunctionGetNumParams(functionRef))
-    }
-
-    /// Gets the type of the parameter at the specified index.
-    public func paramerterType(at index: UInt32) -> Type? {
-        return Type(type: BinaryenFunctionGetParam(functionRef, index))
+    public var parametersType: Type {
+        Type(value: BinaryenFunctionGetParams(functionRef))
     }
 
     /// Gets the result type.
-    public var resultType: Type {
-        return Type(type: BinaryenFunctionGetResult(functionRef))
+    public var resultsType: Type {
+        return Type(value: BinaryenFunctionGetResults(functionRef))
     }
 
     /// Gets the number of additional locals.
@@ -39,8 +26,8 @@ public struct Function {
     }
 
     /// Gets the type of the additional local at the specified index.
-    public func variableType(at index: UInt32) -> Type? {
-        return Type(type: BinaryenFunctionGetVar(functionRef, index))
+    public func variableType(at index: UInt32) -> Type {
+        return Type(value: BinaryenFunctionGetVar(functionRef, index))
     }
 
     /// Gets the body of the specified `Function`.

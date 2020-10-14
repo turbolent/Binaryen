@@ -1,9 +1,12 @@
-// swift-tools-version:5.0
+// swift-tools-version:5.1
 
 import PackageDescription
 
 let package = Package(
     name: "Binaryen",
+    platforms: [
+        .macOS(.v10_15)
+    ],
     products: [
         .library(name: "Binaryen", targets: ["Binaryen"]),
     ],
