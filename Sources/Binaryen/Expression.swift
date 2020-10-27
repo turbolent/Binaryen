@@ -11,14 +11,13 @@ public class Expression {
     }
 
     public var type: Type {
-        return Type(type: BinaryenExpressionGetType(expressionRef))
+        return Type(value: BinaryenExpressionGetType(expressionRef))
     }
 
     public func print() {
         BinaryenExpressionPrint(expressionRef)
     }
 }
-
 
 public final class BlockExpression: Expression {
 
@@ -31,7 +30,7 @@ public final class BlockExpression: Expression {
     }
 
     public func child(at index: UInt32) -> Expression? {
-        return BinaryenBlockGetChild(expressionRef, index)
+        return BinaryenBlockGetChildAt(expressionRef, index)
             .map { Expression(expressionRef: $0) }
     }
 }
@@ -91,7 +90,7 @@ public final class SwitchExpression: Expression {
     }
 
     public func name(at index: UInt32) -> String? {
-        return BinaryenSwitchGetName(expressionRef, index)
+        return BinaryenSwitchGetNameAt(expressionRef, index)
             .map { String(cString: $0) }
     }
 
@@ -121,7 +120,7 @@ public final class CallExpression: Expression {
     }
 
     public func operand(at index: UInt32) -> Expression? {
-        return BinaryenCallGetOperand(expressionRef, index)
+        return BinaryenCallGetOperandAt(expressionRef, index)
             .map { Expression(expressionRef: $0) }
     }
 }
@@ -138,7 +137,7 @@ public final class CallIndirectExpression: Expression {
     }
 
     public func operand(at index: UInt32) -> Expression? {
-        return BinaryenCallIndirectGetOperand(expressionRef, index)
+        return BinaryenCallIndirectGetOperandAt(expressionRef, index)
             .map { Expression(expressionRef: $0) }
     }
 }
@@ -147,7 +146,7 @@ public final class CallIndirectExpression: Expression {
 public final class GetLocalExpression: Expression {
 
     public var index: Int {
-        return Int(BinaryenGetLocalGetIndex(expressionRef))
+        return Int(BinaryenLocalGetGetIndex(expressionRef))
     }
 }
 
@@ -155,11 +154,11 @@ public final class GetLocalExpression: Expression {
 public final class SetLocalExpression: Expression {
 
     public var index: Int {
-        return Int(BinaryenSetLocalGetIndex(expressionRef))
+        return Int(BinaryenLocalSetGetIndex(expressionRef))
     }
 
     public var value: Expression {
-        return Expression(expressionRef: BinaryenSetLocalGetValue(expressionRef))
+        return Expression(expressionRef: BinaryenLocalSetGetValue(expressionRef))
     }
 }
 
@@ -167,12 +166,12 @@ public final class SetLocalExpression: Expression {
 public final class SetGlobalExpression: Expression {
 
     public var name: String {
-        return String(cString: BinaryenSetGlobalGetName(expressionRef))
+        return String(cString: BinaryenGlobalSetGetName(expressionRef))
     }
 
 
     public var value: Expression {
-        return Expression(expressionRef: BinaryenSetGlobalGetValue(expressionRef))
+        return Expression(expressionRef: BinaryenGlobalSetGetValue(expressionRef))
     }
 }
 
@@ -180,7 +179,7 @@ public final class SetGlobalExpression: Expression {
 public final class GetGlobalExpression: Expression {
 
     public var name: String {
-        return String(cString: BinaryenGetGlobalGetName(expressionRef))
+        return String(cString: BinaryenGlobalGetName(expressionRef))
     }
 }
 
@@ -262,8 +261,8 @@ public final class LiteralExpression: Expression {
 
 
 public final class UnaryExpression: Expression {
-    public var op: Op {
-        return Op(op: BinaryenUnaryGetOp(expressionRef))
+    public var instruction: Instruction {
+        return .init(value: BinaryenUnaryGetOp(expressionRef))
     }
 
     public var value: Expression {
@@ -273,8 +272,8 @@ public final class UnaryExpression: Expression {
 
 
 public final class BinaryExpression: Expression {
-    public var op: Op {
-        return Op(op: BinaryenBinaryGetOp(expressionRef))
+    public var instruction: Instruction {
+        return .init(value: BinaryenBinaryGetOp(expressionRef))
     }
 
     public var left: Expression {
@@ -319,28 +318,6 @@ public final class ReturnExpression: Expression {
             .map { Expression(expressionRef: $0) }
     }
 }
-
-
-public final class HostExpression: Expression {
-
-    public var op: Op {
-        return Op(op: BinaryenHostGetOp(expressionRef))
-    }
-
-    public var nameOperand: String? {
-        return BinaryenHostGetNameOperand(expressionRef)
-            .map { String(cString: $0) }
-    }
-
-    public var operandCount: Int {
-        return Int(BinaryenHostGetNumOperands(expressionRef))
-    }
-
-    public func operand(at index: Int) -> Expression {
-        return Expression(expressionRef: BinaryenHostGetOperand(expressionRef, BinaryenIndex(index)))
-    }
-}
-
 
 public final class MemoryInitExpression: Expression {
 

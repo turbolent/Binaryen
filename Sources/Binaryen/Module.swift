@@ -15,81 +15,72 @@ import Foundation
 /// and a start method.
 ///
 public final class Module {
-
-    public let moduleRef: BinaryenModuleRef!
+    let ref: BinaryenModuleRef!
 
     public let expressions: ExpressionFactory
 
-    internal init(moduleRef: BinaryenModuleRef!) {
-        self.moduleRef = moduleRef
-        self.expressions = ExpressionFactory(moduleRef: moduleRef)
+    init(ref: BinaryenModuleRef!) {
+        self.ref = ref
+        self.expressions = ExpressionFactory(ref: ref)
     }
 
     public convenience init() {
-        self.init(moduleRef: BinaryenModuleCreate())
+        self.init(ref: BinaryenModuleCreate())
     }
 
     /// Deserialize a module from binary form.
-    public convenience init(data: Data) {
-        var data = data
-        let count = data.count
-        self.init(moduleRef: data.withUnsafeMutableBytes { pointer in
-            BinaryenModuleRead(pointer, count)
-        })
+    public convenience init?(binary: [UInt8]) {
+        var binary = binary
+        let count = binary.count
+        guard let ref = binary.withUnsafeMutableBufferPointer({
+            $0.withMemoryRebound(to: Int8.self) {
+                BinaryenModuleRead($0.baseAddress, count)
+            }
+        }) else { return nil }
+
+        self.init(ref: ref)
     }
 
     /// Validate a module, showing errors on problems.
     public var isValid: Bool {
-        return BinaryenModuleValidate(moduleRef) == 1
+        return BinaryenModuleValidate(ref) == 1
     }
 
     /// Auto-generate drop() operations where needed. This lets you generate code without
     /// worrying about where they are needed. (It is more efficient to do it yourself,
     /// but simpler to use autodrop).
     public func autoDrop() {
-        BinaryenModuleAutoDrop(moduleRef)
+        BinaryenModuleAutoDrop(ref)
     }
 
     /// Runs the standard optimization passes on the module. Uses the currently set
     /// global optimize and shrink level.
     public func optimize() {
-        BinaryenModuleOptimize(moduleRef)
+        BinaryenModuleOptimize(ref)
     }
 
     /// Print a module to stdout in s-expression text format. Useful for debugging.
     public func print() {
-        BinaryenModulePrint(moduleRef)
+        BinaryenModulePrint(ref)
     }
 
     /// Serializes a module into binary form, optionally including its source map if
     /// sourceMapUrl has been specified. Uses the currently set global debugInfo option.
     public func write(sourceMapURL: String? = nil) -> WriteResult {
         return WriteResult(result:
-            BinaryenModuleAllocateAndWrite(moduleRef, sourceMapURL?.cString(using: .utf8))
+            BinaryenModuleAllocateAndWrite(ref, sourceMapURL?.cString(using: .utf8))
         )
     }
 
-    /// Add a new function type. This is thread-safe.
-    /// Note: name can be nil, in which case we auto-generate a name
-    public func addFunctionType(name: String? = nil, result: Type, parameterTypes: [Type]) -> FunctionType? {
-        var parameterTypes = parameterTypes.map { $0.type }
-        guard let functionTypeRef =
-            BinaryenAddFunctionType(
-                moduleRef,
-                name?.cString(using: .utf8),
-                result.type,
-                UnsafeMutablePointer(&parameterTypes),
-                BinaryenIndex(parameterTypes.count)
-            )
-        else {
-            return nil
-        }
-        return FunctionType(functionTypeRef: functionTypeRef)
-    }
+    /// Serialize a module in s-expression form.
+    public func writeText() -> String? {
+        guard let result = BinaryenModuleAllocateAndWriteText(ref) else { return nil }
 
-    /// Removes a function type.
-    public func removeFunctionType(name: String) {
-        BinaryenRemoveFunctionType(moduleRef, name.cString(using: .utf8))
+        defer {
+            free(result)
+        }
+
+        return String(cString: result)
     }
 
     /// Adds a function to the module. This is thread-safe.
@@ -103,14 +94,21 @@ public final class Module {
     ///    0 (and written $0), and if you also have 2 vars they will be
     ///    at indexes 1 and 2, etc., that is, they share an index space.
     ///
-    public func addFunction(name: String, type: FunctionType, variableTypes: [Type], body: Expression) -> Function? {
-        var variableTypes = variableTypes.map { $0.type }
+    @discardableResult public func addFunction(
+        name: String,
+        parameters: Type,
+        results: Type,
+        variableTypes: [Type] = [],
+        body: Expression
+    ) -> Function? {
+        var variableTypes = variableTypes.map { $0.rawValue }
         guard let functionRef =
             BinaryenAddFunction(
-                moduleRef,
+                ref,
                 name.cString(using: .utf8),
-                type.functionTypeRef,
-                UnsafeMutablePointer(&variableTypes),
+                parameters.rawValue,
+                results.rawValue,
+                &variableTypes,
                 BinaryenIndex(variableTypes.count),
                 body.expressionRef
             )
@@ -124,7 +122,7 @@ public final class Module {
     /// Gets a function reference by name.
     public func getFunction(name: String) -> Function? {
         guard let functionRef =
-            BinaryenGetFunction(moduleRef, name.cString(using: .utf8))
+            BinaryenGetFunction(ref, name.cString(using: .utf8))
         else {
             return nil
         }
@@ -134,26 +132,28 @@ public final class Module {
 
     /// Removes a function by name.
     public func removeFunction(name: String) {
-        BinaryenRemoveFunction(moduleRef, name.cString(using: .utf8))
+        BinaryenRemoveFunction(ref, name.cString(using: .utf8))
     }
 
     /// Set the start function. One per module.
     public func setStart(_ function: Function) {
-        BinaryenSetStart(moduleRef, function.functionRef)
+        BinaryenSetStart(ref, function.functionRef)
     }
 
     public func addFunctionImport(
         internalName: String,
         externalModuleName: String,
         externalBaseName: String,
-        functionType: FunctionType
+        parameters: Type,
+        results: Type
     ) {
         BinaryenAddFunctionImport(
-            moduleRef,
+            ref,
             internalName.cString(using: .utf8),
             externalModuleName.cString(using: .utf8),
             externalBaseName.cString(using: .utf8),
-            functionType.functionTypeRef
+            parameters.rawValue,
+            results.rawValue
         )
     }
 
@@ -163,7 +163,7 @@ public final class Module {
         externalBaseName: String
     ) {
         BinaryenAddTableImport(
-            moduleRef,
+            ref,
             internalName.cString(using: .utf8),
             externalModuleName.cString(using: .utf8),
             externalBaseName.cString(using: .utf8)
@@ -177,7 +177,7 @@ public final class Module {
         shared: Bool
     ) {
         BinaryenAddMemoryImport(
-            moduleRef,
+            ref,
             internalName.cString(using: .utf8),
             externalModuleName.cString(using: .utf8),
             externalBaseName.cString(using: .utf8),
@@ -189,14 +189,16 @@ public final class Module {
         internalName: String,
         externalModuleName: String,
         externalBaseName: String,
-        globalType: Type
+        globalType: Type,
+        isMutable: Bool
     ) {
         BinaryenAddGlobalImport(
-            moduleRef,
+            ref,
             internalName.cString(using: .utf8),
             externalModuleName.cString(using: .utf8),
             externalBaseName.cString(using: .utf8),
-            globalType.type
+            globalType.rawValue,
+            isMutable ? 1 : 0
         )
     }
 
@@ -208,7 +210,7 @@ public final class Module {
     {
         return Export(
             exportRef: BinaryenAddFunctionExport(
-                moduleRef,
+                ref,
                 internalName.cString(using: .utf8),
                 externalName.cString(using: .utf8)
             )
@@ -223,7 +225,7 @@ public final class Module {
     {
         return Export(
             exportRef: BinaryenAddTableExport(
-                moduleRef,
+                ref,
                 internalName.cString(using: .utf8),
                 externalName.cString(using: .utf8)
             )
@@ -238,7 +240,7 @@ public final class Module {
     {
         return Export(
             exportRef: BinaryenAddMemoryExport(
-                moduleRef,
+                ref,
                 internalName.cString(using: .utf8),
                 externalName.cString(using: .utf8)
             )
@@ -253,7 +255,7 @@ public final class Module {
     {
         return Export(
             exportRef: BinaryenAddGlobalExport(
-                moduleRef,
+                ref,
                 internalName.cString(using: .utf8),
                 externalName.cString(using: .utf8)
             )
@@ -264,7 +266,7 @@ public final class Module {
         externalName: String
     ) {
         BinaryenRemoveExport(
-            moduleRef,
+            ref,
             externalName.cString(using: .utf8)
         )
     }
@@ -272,9 +274,9 @@ public final class Module {
     public func addGlobal(name: String, type: Type, mutable: Bool, initial: Expression) -> Global {
         return Global(globalRef:
             BinaryenAddGlobal(
-                moduleRef,
+                ref,
                 name.cString(using: .utf8),
-                type.type,
+                type.rawValue,
                 mutable ? 1 : 0,
                 initial.expressionRef
             )
@@ -282,10 +284,10 @@ public final class Module {
     }
 
     public func removeGlobal(name: String) {
-        BinaryenRemoveGlobal(moduleRef, name.cString(using: .utf8))
+        BinaryenRemoveGlobal(ref, name.cString(using: .utf8))
     }
 
     deinit {
-        BinaryenModuleDispose(moduleRef)
+        BinaryenModuleDispose(ref)
     }
 }

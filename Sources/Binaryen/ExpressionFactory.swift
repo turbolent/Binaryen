@@ -1,9 +1,9 @@
 public struct ExpressionFactory {
 
-    private let moduleRef: BinaryenModuleRef!
+    private let ref: BinaryenModuleRef!
 
-    internal init(moduleRef: BinaryenModuleRef!) {
-        self.moduleRef = moduleRef
+    init(ref: BinaryenModuleRef!) {
+        self.ref = ref
     }
 
     /// Block: `name` can be nil. Specifying `Type.auto` as the 'type'
@@ -20,11 +20,11 @@ public struct ExpressionFactory {
         var children = children.map { $0.expressionRef }
         return BlockExpression(
             expressionRef: BinaryenBlock(
-                moduleRef,
+                ref,
                 name?.cString(using: .utf8),
-                UnsafeMutablePointer(&children),
+                &children,
                 BinaryenIndex(children.count),
-                type.type
+                type.rawValue
             )
         )
     }
@@ -39,7 +39,7 @@ public struct ExpressionFactory {
     {
         return IfExpression(
             expressionRef: BinaryenIf(
-                moduleRef,
+                ref,
                 condition.expressionRef,
                 ifTrue.expressionRef,
                 ifFalse?.expressionRef
@@ -55,7 +55,7 @@ public struct ExpressionFactory {
     {
         return LoopExpression(
             expressionRef: BinaryenLoop(
-                moduleRef,
+                ref,
                 name.cString(using: .utf8),
                 body.expressionRef
             )
@@ -72,7 +72,7 @@ public struct ExpressionFactory {
     {
         return BreakExpression(
             expressionRef: BinaryenBreak(
-                moduleRef,
+                ref,
                 name.cString(using: .utf8),
                 condition?.expressionRef,
                 value?.expressionRef
@@ -89,11 +89,12 @@ public struct ExpressionFactory {
     )
         -> SwitchExpression
     {
-        var names = names.map { UnsafePointer($0.cString(using: .utf8)) }
+        let mutableNames = names.map { strdup($0) }
+        var immutableNames = mutableNames.map { UnsafePointer($0) }
         return SwitchExpression(
             expressionRef: BinaryenSwitch(
-                moduleRef,
-                UnsafeMutablePointer(&names),
+                ref,
+                &immutableNames,
                 BinaryenIndex(names.count),
                 defaultName.cString(using: .utf8),
                 condition.expressionRef,
@@ -109,18 +110,18 @@ public struct ExpressionFactory {
     public func call(
         target: String,
         operands: [Expression],
-        returnType: Type
+        returnTypes: Type
     )
         -> CallExpression
     {
         var operands = operands.map { $0.expressionRef }
         return CallExpression(
             expressionRef: BinaryenCall(
-                moduleRef,
+                ref,
                 target.cString(using: .utf8),
-                UnsafeMutablePointer(&operands),
+                &operands,
                 BinaryenIndex(operands.count),
-                returnType.type
+                returnTypes.rawValue
             )
         )
     }
@@ -128,18 +129,20 @@ public struct ExpressionFactory {
     public func callIndirect(
         target: Expression,
         operands: [Expression],
-        type: String
+        params: Type,
+        results: Type
     )
         -> CallIndirectExpression
     {
         var operands = operands.map { $0.expressionRef }
         return CallIndirectExpression(
             expressionRef: BinaryenCallIndirect(
-                moduleRef,
+                ref,
                 target.expressionRef,
-                UnsafeMutablePointer(&operands),
+                &operands,
                 BinaryenIndex(operands.count),
-                type.cString(using: .utf8)
+                params.rawValue,
+                results.rawValue
             )
         )
     }
@@ -158,50 +161,51 @@ public struct ExpressionFactory {
     ///           a var, that is, either a parameter to the function or a variable
     ///           declared when you call BinaryenAddFunction. See BinaryenAddFunction
     ///           for more details.
-    public func getLocal(index: UInt32, type: Type) -> GetLocalExpression? {
+    public func localGet(index: UInt32, type: Type) -> GetLocalExpression {
         return GetLocalExpression(
-            expressionRef: BinaryenGetLocal(
-                moduleRef,
+            expressionRef: BinaryenLocalGet(
+                ref,
                 index,
-                type.type
+                type.rawValue
             )
         )
     }
 
-    public func setLocal(index: UInt32, value: Expression) -> SetLocalExpression? {
+    public func localSet(index: UInt32, value: Expression) -> SetLocalExpression {
         return SetLocalExpression(
-            expressionRef: BinaryenSetLocal(
-                moduleRef,
+            expressionRef: BinaryenLocalSet(
+                ref,
                 index,
                 value.expressionRef
             )
         )
     }
 
-    public func teeLocal(index: UInt32, value: Expression) -> SetLocalExpression? {
+    public func localTee(index: UInt32, value: Expression, type: Type) -> SetLocalExpression {
         return SetLocalExpression(
-            expressionRef: BinaryenTeeLocal(
-                moduleRef,
+            expressionRef: BinaryenLocalTee(
+                ref,
                 index,
-                value.expressionRef
+                value.expressionRef,
+                type.rawValue
             )
         )
     }
 
-    public func getGlobal(name: String, type: Type) -> GetGlobalExpression {
+    public func globalGet(name: String, type: Type) -> GetGlobalExpression {
         return GetGlobalExpression(
-            expressionRef: BinaryenGetGlobal(
-                moduleRef,
+            expressionRef: BinaryenGlobalGet(
+                ref,
                 name.cString(using: .utf8),
-                type.type
+                type.rawValue
             )
         )
     }
 
-    public func setGlobal(name: String, value: Expression) -> SetGlobalExpression {
+    public func globalSet(name: String, value: Expression) -> SetGlobalExpression {
         return SetGlobalExpression(
-            expressionRef: BinaryenSetGlobal(
-                moduleRef,
+            expressionRef: BinaryenGlobalSet(
+                ref,
                 name.cString(using: .utf8),
                 value.expressionRef
             )
@@ -221,12 +225,12 @@ public struct ExpressionFactory {
     {
         return LoadExpression(
             expressionRef: BinaryenLoad(
-                moduleRef,
+                ref,
                 bytes,
                 signed ? 1 : 0,
                 offset,
                 align,
-                type.type,
+                type.rawValue,
                 pointer.expressionRef
             )
         )
@@ -246,76 +250,63 @@ public struct ExpressionFactory {
     {
         return StoreExpression(
             expressionRef: BinaryenStore(
-                moduleRef,
+                ref,
                 bytes,
                 offset,
                 align,
                 pointer.expressionRef,
                 value.expressionRef,
-                type.type
+                type.rawValue
             )
         )
     }
 
     public func const(value: Literal) -> LiteralExpression {
-        return LiteralExpression(expressionRef: BinaryenConst(moduleRef, value))
+        return LiteralExpression(expressionRef: BinaryenConst(ref, value))
     }
 
-    public func unary(op: Op, value: Expression) -> UnaryExpression {
-        return UnaryExpression(expressionRef: BinaryenUnary(moduleRef, op.op, value.expressionRef))
+    public func unary(instruction: Instruction, _ value: Expression) -> UnaryExpression {
+        return UnaryExpression(expressionRef: BinaryenUnary(ref, instruction.rawValue, value.expressionRef))
     }
 
-    public func binary(op: Op, left: Expression, right: Expression) -> BinaryExpression {
+    public func binary(instruction: Instruction, _ left: Expression, _ right: Expression) -> BinaryExpression {
         return BinaryExpression(
             expressionRef: BinaryenBinary(
-                moduleRef,
-                op.op,
+                ref,
+                instruction.rawValue,
                 left.expressionRef,
                 right.expressionRef
             )
         )
     }
 
-    public func select(condition: Expression, ifTrue: Expression, ifFalse: Expression) -> SelectExpression {
+    public func select(condition: Expression, ifTrue: Expression, ifFalse: Expression, type: Type) -> SelectExpression {
         return SelectExpression(
             expressionRef: BinaryenSelect(
-                moduleRef,
+                ref,
                 condition.expressionRef,
                 ifTrue.expressionRef,
-                ifFalse.expressionRef
+                ifFalse.expressionRef,
+                type.rawValue
             )
         )
     }
 
     public func drop(value: Expression) -> DropExpression {
-        return DropExpression(expressionRef: BinaryenDrop(moduleRef, value.expressionRef))
+        return DropExpression(expressionRef: BinaryenDrop(ref, value.expressionRef))
     }
 
     /// Return: value can be nil.
     public func `return`(value: Expression? = nil) -> ReturnExpression {
-        return ReturnExpression(expressionRef: BinaryenReturn(moduleRef, value?.expressionRef))
-    }
-
-    // Host: name may be nil.
-    public func host(op: Op, name: String, operands: [Expression]) -> HostExpression {
-        var operands = operands.map { $0.expressionRef }
-        return HostExpression(
-            expressionRef: BinaryenHost(
-                moduleRef,
-                op.op,
-                name.cString(using: .utf8),
-                UnsafeMutablePointer(&operands),
-                BinaryenIndex(operands.count)
-            )
-        )
+        return ReturnExpression(expressionRef: BinaryenReturn(ref, value?.expressionRef))
     }
 
     public func nop() -> Expression {
-        return Expression(expressionRef: BinaryenNop(moduleRef))
+        return Expression(expressionRef: BinaryenNop(ref))
     }
 
     public func unreachable() -> Expression {
-        return Expression(expressionRef: BinaryenUnreachable(moduleRef))
+        return Expression(expressionRef: BinaryenUnreachable(ref))
     }
 
     public func memoryInit(
@@ -328,7 +319,7 @@ public struct ExpressionFactory {
     {
         return MemoryInitExpression(
             expressionRef: BinaryenMemoryInit(
-                moduleRef,
+                ref,
                 segment,
                 destination.expressionRef,
                 offset.expressionRef,
@@ -338,7 +329,7 @@ public struct ExpressionFactory {
     }
 
     public func dataDrop(segment: UInt32) -> DataDropExpression {
-        return DataDropExpression(expressionRef: BinaryenDataDrop(moduleRef, segment))
+        return DataDropExpression(expressionRef: BinaryenDataDrop(ref, segment))
     }
 
     public func memoryCopy(
@@ -351,7 +342,7 @@ public struct ExpressionFactory {
     {
         return MemoryCopyExpression(
             expressionRef: BinaryenMemoryCopy(
-                moduleRef,
+                ref,
                 destination.expressionRef,
                 source.expressionRef,
                 size.expressionRef
@@ -369,7 +360,7 @@ public struct ExpressionFactory {
     {
         return MemoryFillExpression(
             expressionRef: BinaryenMemoryFill(
-                moduleRef,
+                ref,
                 destination.expressionRef,
                 value.expressionRef,
                 size.expressionRef

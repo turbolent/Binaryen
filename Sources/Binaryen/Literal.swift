@@ -17,7 +17,7 @@ public extension BinaryenLiteral {
     }
 
     static func vec128(_ value: [UInt8]) -> BinaryenLiteral {
-        return BinaryenLiteralVec128(UnsafePointer(value))
+        return BinaryenLiteralVec128(value)
     }
 
     static func float32Bits(_ value: Int32) -> BinaryenLiteral {
